@@ -1,15 +1,12 @@
 import { getMonthTransactions, addTransaction, deleteTransaction, updateTransaction, addTransfer, deleteTransfer, updateTransfer, getAssets, getCategories, addCategory, getUsageCounts, getFixedNames } from '../db.js';
-import { typeInfo } from './assets.js';
 
 let EXPENSE_CATS = [];
 let INCOME_CATS = [];
-let EMOJI = {};
 let usageCounts = { categories: {}, assets: {} };
 
 function buildCategoryMaps(categories) {
   EXPENSE_CATS = categories.filter(c => c.type === 'expense');
   INCOME_CATS = categories.filter(c => c.type === 'income');
-  EMOJI = Object.fromEntries(categories.map(c => [c.name, c.emoji || '📦']));
 }
 
 function fmt(n) { return n.toLocaleString('ko-KR') + '원'; }
@@ -174,23 +171,20 @@ function renderList(listEl) {
     const isAuto = !!t.isAutoReward;
     const isTransfer = t.type === 'transfer';
 
-    let icon, label, sub, amountEl;
+    let label, sub, amountEl;
 
     if (isTransfer) {
       const fromAsset = assets.find(a => a.id === t.fromAssetId);
       const toAsset = assets.find(a => a.id === t.toAssetId);
       const fromName = fromAsset?.name || t.fromAssetName || '?';
       const toName = toAsset?.name || t.toAssetName || '?';
-      icon = '🔄';
       label = `${fromName} → ${toName}`;
       sub = `이체${t.memo ? ' · ' + t.memo : ''}`;
       amountEl = `<span class="text-sm font-bold text-indigo-500 mr-2 whitespace-nowrap">${fmt(t.amount)}</span>`;
     } else {
       const asset = assets.find(a => a.id === t.assetId);
-      const assetInfo = asset ? typeInfo(asset.type) : null;
-      icon = isAuto ? '🎁' : (EMOJI[t.category] || '📦');
       label = `${t.category}${t.memo ? ' · ' + t.memo : ''}`;
-      sub = `${displayDate(t.date)}${assetInfo ? ' · ' + assetInfo.icon + ' ' + asset.name : ''}`;
+      sub = `${displayDate(t.date)}${asset ? ' · ' + asset.name : ''}`;
       const color = t.type === 'income' ? 'text-blue-500' : 'text-red-500';
       const sign = t.type === 'income' ? '+' : '-';
       const hasInst = t.type === 'expense' && t.installment > 1;
@@ -203,12 +197,11 @@ function renderList(listEl) {
 
     const actions = isAuto
       ? `<span class="text-xs text-gray-300 px-1">자동</span>`
-      : `<button class="edit-btn text-gray-300 p-1" data-id="${t.id}">✏️</button>
-         <button class="del-btn text-gray-300 p-1" data-id="${t.id}">🗑️</button>`;
+      : `<button class="edit-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">수정</button>
+         <button class="del-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">삭제</button>`;
 
     return `
       <div class="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm ${isAuto ? 'opacity-70' : ''}">
-        <span class="text-xl w-8 text-center">${icon}</span>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
             <p class="text-sm font-medium text-gray-800 truncate">${label}</p>
@@ -341,7 +334,7 @@ function renderCatGrid() {
   grid.innerHTML = cats.map(c => `
     <button class="cat-btn py-2 px-1 rounded-xl text-xs font-medium border transition
       ${c.name === selectedCat ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-gray-200 text-gray-600 bg-white'}"
-      data-cat="${c.name}">${c.emoji || '📦'} ${c.name}</button>
+      data-cat="${c.name}">${c.name}</button>
   `).join('');
   grid.onclick = e => {
     const btn = e.target.closest('.cat-btn');
@@ -357,8 +350,6 @@ function renderCatGrid() {
   area.innerHTML = `
     <button id="qc-trigger" class="text-xs text-indigo-400 font-medium">+ 새 카테고리</button>
     <div id="qc-form" style="display:none" class="gap-2 items-center mt-1">
-      <input id="qc-emoji" type="text" placeholder="📦" maxlength="2"
-        class="w-12 border border-gray-200 rounded-lg px-2 py-2 text-lg text-center focus:outline-none focus:border-indigo-400" />
       <input id="qc-name" type="text" placeholder="카테고리 이름"
         class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-indigo-400" />
       <button id="qc-save" class="bg-indigo-500 text-white text-xs font-medium px-3 py-2 rounded-lg whitespace-nowrap active:bg-indigo-600">저장</button>
@@ -379,19 +370,16 @@ function renderCatGrid() {
   area.querySelector('#qc-cancel').addEventListener('click', () => {
     triggerBtn.style.display = '';
     formEl.style.display = 'none';
-    area.querySelector('#qc-emoji').value = '';
     area.querySelector('#qc-name').value = '';
   });
 
   const doSave = async () => {
-    const emoji = area.querySelector('#qc-emoji').value.trim() || '📦';
     const name = area.querySelector('#qc-name').value.trim();
     if (!name) return;
-    const ref = await addCategory({ name, emoji, type: selectedType });
-    const newCat = { id: ref.id, name, emoji, type: selectedType };
+    const ref = await addCategory({ name, type: selectedType });
+    const newCat = { id: ref.id, name, type: selectedType };
     if (selectedType === 'expense') EXPENSE_CATS.push(newCat);
     else INCOME_CATS.push(newCat);
-    EMOJI[name] = emoji;
     selectedCat = name;
     renderCatGrid();
   };
@@ -451,11 +439,10 @@ function assetChipHtml(assetId, assets, activeId) {
       ${noneActive && assetId === '' ? 'border-gray-400 bg-gray-100 text-gray-700' : 'border-gray-200 text-gray-400'}"
       data-asset-id="">미선택</button>
     ${sorted.map(a => {
-      const ti = typeInfo(a.type);
       const isActive = a.id === activeId;
       return `<button class="asset-chip px-3 py-1.5 rounded-full text-xs font-medium border transition
         ${isActive ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-gray-200 text-gray-500'}"
-        data-asset-id="${a.id}">${ti.icon} ${a.name}</button>`;
+        data-asset-id="${a.id}">${a.name}</button>`;
     }).join('')}
   `;
 }

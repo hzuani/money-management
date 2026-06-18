@@ -1,9 +1,8 @@
-import { getMonthTransactions, getCategories } from '../db.js';
+import { getMonthTransactions } from '../db.js';
 
 const now = new Date();
 let year = now.getFullYear();
 let month = now.getMonth() + 1;
-let EMOJI = {};
 
 export async function renderFixed(container) {
   await load(container);
@@ -45,13 +44,10 @@ async function load(container) {
     const prevYear = month === 1 ? year - 1 : year;
     const prevMonth = month === 1 ? 12 : month - 1;
 
-    const [currTxs, prevTxs, categories] = await Promise.all([
+    const [currTxs, prevTxs] = await Promise.all([
       getMonthTransactions(year, month),
       getMonthTransactions(prevYear, prevMonth),
-      getCategories(),
     ]);
-
-    EMOJI = Object.fromEntries(categories.map(c => [c.name, c.emoji || '📦']));
 
     const currFixed = currTxs.filter(t => t.isFixed && t.type !== 'income');
     const prevFixed = prevTxs.filter(t => t.isFixed && t.type !== 'income');
@@ -143,25 +139,23 @@ function fmt(n) { return Number(n).toLocaleString('ko-KR') + '원'; }
 
 function txMeta(tx, key) {
   const isTransfer = tx.type === 'transfer';
-  const emoji = isTransfer ? '🔄' : (EMOJI[tx.category] || '📦');
   const sub = isTransfer
     ? [`${tx.fromAssetName || '?'} → ${tx.toAssetName || '?'}`, fmtDate(tx.date)].join(' · ')
     : [tx.category, tx.memo && tx.memo.trim() !== key ? tx.memo : null, fmtDate(tx.date)].filter(Boolean).join(' · ');
   const amountColor = isTransfer ? 'text-indigo-500' : 'text-red-500';
   const amountPrefix = isTransfer ? '' : '-';
-  return { emoji, sub, amountColor, amountPrefix };
+  return { sub, amountColor, amountPrefix };
 }
 
 function renderPaidItem(tx, key) {
-  const { emoji, sub, amountColor, amountPrefix } = txMeta(tx, key);
+  const { sub, amountColor, amountPrefix } = txMeta(tx, key);
   return `
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-green-100">
       <div class="flex items-center gap-3">
-        <span class="text-xl w-8 text-center">${emoji}</span>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <p class="text-sm font-semibold text-gray-800 truncate">${key}</p>
-            <span class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">✅ 완료</span>
+            <span class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">완료</span>
           </div>
           <p class="text-xs text-gray-400 mt-0.5 truncate">${sub}</p>
         </div>
@@ -172,10 +166,9 @@ function renderPaidItem(tx, key) {
 }
 
 function renderForecastItem(ref, key) {
-  let emoji = '📦', sub = key, amountStr = '-';
+  let sub = key, amountStr = '-';
   if (ref) {
     const meta = txMeta(ref, key);
-    emoji = meta.emoji;
     const subParts = ref.type === 'transfer'
       ? [`${ref.fromAssetName || '?'} → ${ref.toAssetName || '?'}`, `지난달 ${fmtDate(ref.date)} 기준`]
       : [ref.category, ref.memo && ref.memo.trim() !== key ? ref.memo : null, `지난달 ${fmtDate(ref.date)} 기준`].filter(Boolean);
@@ -185,11 +178,10 @@ function renderForecastItem(ref, key) {
   return `
     <div class="bg-white rounded-2xl p-4 shadow-sm border border-dashed border-gray-200 opacity-60">
       <div class="flex items-center gap-3">
-        <span class="text-xl w-8 text-center">${emoji}</span>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2">
             <p class="text-sm font-semibold text-gray-600 truncate">${key}</p>
-            <span class="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">⬜ 예정</span>
+            <span class="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">예정</span>
           </div>
           <p class="text-xs text-gray-400 mt-0.5 truncate">${sub}</p>
         </div>

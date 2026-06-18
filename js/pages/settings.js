@@ -20,10 +20,7 @@ export function renderSettings(container) {
       <!-- 메뉴 -->
       <div class="bg-white rounded-2xl shadow-sm divide-y divide-gray-50 mb-4">
         <button id="go-categories" class="w-full flex items-center justify-between px-4 py-3.5 active:bg-gray-50">
-          <div class="flex items-center gap-3">
-            <span class="text-lg">🏷️</span>
-            <span class="text-sm text-gray-800">카테고리 관리</span>
-          </div>
+          <span class="text-sm text-gray-800">카테고리 관리</span>
           <span class="text-gray-300">›</span>
         </button>
       </div>

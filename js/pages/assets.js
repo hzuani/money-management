@@ -1,15 +1,15 @@
 import { getAssets, addAsset, updateAsset, deleteAsset, swapAssetOrder } from '../db.js';
 
 const ASSET_TYPES = [
-  { value: 'bank',       label: '은행계좌',  icon: '🏦', color: '#3b82f6', bg: '#eff6ff' },
-  { value: 'cash',       label: '현금',      icon: '💵', color: '#10b981', bg: '#f0fdf4' },
-  { value: 'credit',     label: '신용카드',  icon: '💳', color: '#ef4444', bg: '#fef2f2' },
-  { value: 'debit',      label: '체크카드',  icon: '🪪', color: '#8b5cf6', bg: '#f5f3ff' },
-  { value: 'prepaid',    label: '충전카드',  icon: '🎟️', color: '#0ea5e9', bg: '#f0f9ff' },
-  { value: 'reward',     label: '적립금',    icon: '🎁', color: '#f97316', bg: '#fff7ed' },
-  { value: 'investment', label: '투자계좌',  icon: '📈', color: '#f59e0b', bg: '#fffbeb' },
-  { value: 'savings',    label: '적금',      icon: '🐷', color: '#ec4899', bg: '#fdf2f8' },
-  { value: 'housing',    label: '주택청약',  icon: '🏠', color: '#6366f1', bg: '#eef2ff' },
+  { value: 'bank',       label: '은행계좌',  color: '#3b82f6', bg: '#eff6ff' },
+  { value: 'cash',       label: '현금',      color: '#10b981', bg: '#f0fdf4' },
+  { value: 'credit',     label: '신용카드',  color: '#ef4444', bg: '#fef2f2' },
+  { value: 'debit',      label: '체크카드',  color: '#8b5cf6', bg: '#f5f3ff' },
+  { value: 'prepaid',    label: '충전카드',  color: '#0ea5e9', bg: '#f0f9ff' },
+  { value: 'reward',     label: '적립금',    color: '#f97316', bg: '#fff7ed' },
+  { value: 'investment', label: '투자계좌',  color: '#f59e0b', bg: '#fffbeb' },
+  { value: 'savings',    label: '적금',      color: '#ec4899', bg: '#fdf2f8' },
+  { value: 'housing',    label: '주택청약',  color: '#6366f1', bg: '#eef2ff' },
 ];
 
 export function typeInfo(value) {
@@ -61,8 +61,8 @@ function buildShell() {
           <label class="text-xs text-gray-500 mb-2 block">자산 종류</label>
           <div class="grid grid-cols-4 gap-2" id="type-grid">
             ${ASSET_TYPES.map(t => `
-              <button class="type-btn flex flex-col items-center gap-1 py-2.5 rounded-xl border border-gray-200 text-xs font-medium text-gray-600" data-type="${t.value}">
-                <span class="text-lg">${t.icon}</span>${t.label}
+              <button class="type-btn flex items-center justify-center py-2.5 rounded-xl border border-gray-200 text-xs font-medium text-gray-600" data-type="${t.value}">
+                ${t.label}
               </button>
             `).join('')}
           </div>
@@ -221,9 +221,6 @@ function renderList() {
 
     return `
       <div class="bg-white rounded-2xl px-4 py-3.5 shadow-sm flex items-center gap-3 ${isReward ? 'ml-5 border-l-2 border-sky-200' : ''}">
-        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style="background:${t.bg}">
-          ${t.icon}
-        </div>
         <div class="flex-1 min-w-0">
           <p class="text-sm font-semibold text-gray-800">${a.name}</p>
           <p class="text-xs text-gray-400 truncate">${subInfo}</p>
@@ -231,8 +228,8 @@ function renderList() {
         <span class="text-sm font-bold ${balanceColor} mr-1">${fmt(a.balance)}</span>
         <div class="flex flex-col">${orderBtns}</div>
         <div class="flex gap-1">
-          <button class="edit-asset text-gray-300 p-1" data-id="${a.id}">✏️</button>
-          <button class="del-asset text-gray-300 p-1" data-id="${a.id}">🗑️</button>
+          <button class="edit-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">수정</button>
+          <button class="del-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">삭제</button>
         </div>
       </div>
     `;

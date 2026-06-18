@@ -1,4 +1,4 @@
-import { getMonthSummary, getCategories, getCardPayments } from '../db.js';
+import { getMonthSummary, getCardPayments } from '../db.js';
 import { navigate } from '../router.js';
 
 function fmt(n) { return n.toLocaleString('ko-KR') + '원'; }
@@ -43,18 +43,16 @@ export async function renderDashboard(container) {
     const nextYear = month === 12 ? year + 1 : year;
     const nextMonth = month === 12 ? 1 : month + 1;
 
-    const [{ income, expense, txs }, categories, cardPayments] = await Promise.all([
+    const [{ income, expense, txs }, cardPayments] = await Promise.all([
       getMonthSummary(year, month),
-      getCategories(),
       getCardPayments(nextYear, nextMonth),
     ]);
-    const EMOJI = Object.fromEntries(categories.map(c => [c.name, c.emoji || '📦']));
 
     // 이번 달 요약
     const balance = income - expense;
     const cardSection = cardPayments.length > 0 ? `
       <div class="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-        <p class="text-xs font-semibold text-amber-600 mb-2">💳 ${nextMonth}월 카드 결제 예정</p>
+        <p class="text-xs font-semibold text-amber-600 mb-2">${nextMonth}월 카드 결제 예정</p>
         ${cardPayments.map(c => `
           <div class="flex justify-between items-center py-0.5">
             <span class="text-sm text-gray-600">${c.assetName}</span>
@@ -93,8 +91,6 @@ export async function renderDashboard(container) {
     } else {
       listEl.innerHTML = recent.map(t => {
         const isTransfer = t.type === 'transfer';
-        const isAuto = !!t.isAutoReward;
-        const icon = isTransfer ? '🔄' : (isAuto ? '🎁' : (EMOJI[t.category] || '📦'));
         const label = isTransfer
           ? `${t.fromAssetName || '?'} → ${t.toAssetName || '?'}`
           : (t.category || '미분류') + (t.memo ? ' · ' + t.memo : '');
@@ -102,7 +98,6 @@ export async function renderDashboard(container) {
         const sign = isTransfer ? '' : (t.type === 'income' ? '+' : '-');
         return `
           <div class="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm">
-            <span class="text-xl w-8 text-center">${icon}</span>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-gray-800 truncate">${label}</p>
               <p class="text-xs text-gray-400">${displayDate(t.date)}</p>

@@ -64,20 +64,20 @@ function applyUsage(batch, nested) {
 // ─── 카테고리 ──────────────────────────────────────────────
 
 const DEFAULT_CATEGORIES = [
-  { name: '식비',     type: 'expense', emoji: '🍚', sortOrder: 1 },
-  { name: '교통',     type: 'expense', emoji: '🚌', sortOrder: 2 },
-  { name: '쇼핑',     type: 'expense', emoji: '🛍️', sortOrder: 3 },
-  { name: '의료',     type: 'expense', emoji: '💊', sortOrder: 4 },
-  { name: '문화/여가', type: 'expense', emoji: '🎬', sortOrder: 5 },
-  { name: '통신',     type: 'expense', emoji: '📱', sortOrder: 6 },
-  { name: '주거',     type: 'expense', emoji: '🏠', sortOrder: 7 },
-  { name: '교육',     type: 'expense', emoji: '📚', sortOrder: 8 },
-  { name: '기타',     type: 'expense', emoji: '📦', sortOrder: 9 },
-  { name: '급여',     type: 'income',  emoji: '💼', sortOrder: 10 },
-  { name: '부업',     type: 'income',  emoji: '💡', sortOrder: 11 },
-  { name: '이자/배당', type: 'income', emoji: '📈', sortOrder: 12 },
-  { name: '적립금',   type: 'income',  emoji: '🎁', sortOrder: 13, isSystem: true },
-  { name: '기타',     type: 'income',  emoji: '📦', sortOrder: 14 },
+  { name: '식비',     type: 'expense', sortOrder: 1 },
+  { name: '교통',     type: 'expense', sortOrder: 2 },
+  { name: '쇼핑',     type: 'expense', sortOrder: 3 },
+  { name: '의료',     type: 'expense', sortOrder: 4 },
+  { name: '문화/여가', type: 'expense', sortOrder: 5 },
+  { name: '통신',     type: 'expense', sortOrder: 6 },
+  { name: '주거',     type: 'expense', sortOrder: 7 },
+  { name: '교육',     type: 'expense', sortOrder: 8 },
+  { name: '기타',     type: 'expense', sortOrder: 9 },
+  { name: '급여',     type: 'income',  sortOrder: 10 },
+  { name: '부업',     type: 'income',  sortOrder: 11 },
+  { name: '이자/배당', type: 'income', sortOrder: 12 },
+  { name: '적립금',   type: 'income',  sortOrder: 13, isSystem: true },
+  { name: '기타',     type: 'income',  sortOrder: 14 },
 ];
 
 export async function getCategories() {

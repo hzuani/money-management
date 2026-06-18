@@ -37,17 +37,10 @@ function buildShell() {
       <div class="relative bg-white rounded-t-2xl w-full max-w-md mx-auto p-6 z-10">
         <h2 id="cat-modal-title" class="text-lg font-bold text-gray-800 mb-4">카테고리 추가</h2>
 
-        <div class="flex gap-3 mb-3">
-          <div class="w-20">
-            <label class="text-xs text-gray-500 mb-1 block">이모지</label>
-            <input id="cat-emoji" type="text" placeholder="📦" maxlength="2"
-              class="w-full border border-gray-200 rounded-xl px-3 py-3 text-2xl text-center focus:outline-none focus:border-indigo-400" />
-          </div>
-          <div class="flex-1">
-            <label class="text-xs text-gray-500 mb-1 block">이름</label>
-            <input id="cat-name" type="text" placeholder="카테고리 이름"
-              class="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-indigo-400" />
-          </div>
+        <div class="mb-3">
+          <label class="text-xs text-gray-500 mb-1 block">이름</label>
+          <input id="cat-name" type="text" placeholder="카테고리 이름"
+            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-indigo-400" />
         </div>
 
         <div class="flex bg-gray-100 rounded-xl p-1 mb-5" id="cat-type-tabs">
@@ -72,12 +65,11 @@ function renderCatList() {
   }
   el.innerHTML = filtered.map(c => `
     <div class="flex items-center gap-3 px-4 py-3.5">
-      <span class="text-xl w-8 text-center">${c.emoji || '📦'}</span>
       <span class="flex-1 text-sm text-gray-800">${c.name}</span>
       ${c.isSystem
         ? `<span class="text-xs text-gray-300 mr-2">시스템</span>`
-        : `<button class="edit-cat text-gray-300 p-1" data-id="${c.id}">✏️</button>
-           <button class="del-cat text-gray-300 p-1" data-id="${c.id}">🗑️</button>`
+        : `<button class="edit-cat text-xs text-gray-400 px-1.5" data-id="${c.id}">수정</button>
+           <button class="del-cat text-xs text-gray-400 px-1.5" data-id="${c.id}">삭제</button>`
       }
     </div>
   `).join('');
@@ -99,7 +91,6 @@ function switchCatTab(tab) {
 function openModal(cat = null) {
   editingCat = cat;
   document.getElementById('cat-modal-title').textContent = cat ? '카테고리 수정' : '카테고리 추가';
-  document.getElementById('cat-emoji').value = cat?.emoji || '';
   document.getElementById('cat-name').value = cat?.name || '';
   switchModalType(cat ? cat.type : catTab);
   document.getElementById('cat-modal').classList.remove('hidden');
@@ -140,11 +131,10 @@ function bindEvents(container) {
   });
 
   document.getElementById('cat-save-btn').addEventListener('click', async () => {
-    const emoji = document.getElementById('cat-emoji').value.trim();
     const name = document.getElementById('cat-name').value.trim();
     if (!name) return alert('이름을 입력해주세요');
 
-    const data = { name, emoji: emoji || '📦', type: modalType };
+    const data = { name, type: modalType };
     if (editingCat) {
       await updateCategory(editingCat.id, data);
       const idx = categories.findIndex(c => c.id === editingCat.id);
