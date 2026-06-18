@@ -1,4 +1,4 @@
-import { getAssets, addAsset, updateAsset, deleteAsset, swapAssetOrder } from '../db.js';
+import { getAssets, addAsset, updateAsset, deleteAsset, swapAssetOrder, addTransfer, getCardPayments } from '../db.js';
 
 const ASSET_TYPES = [
   { value: 'bank',       label: '은행계좌',  color: '#3b82f6', bg: '#eff6ff' },
@@ -21,9 +21,15 @@ function fmt(n) {
   return (n < 0 ? '-' : '') + abs + '원';
 }
 
+function localDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 let assets = [];
 let editing = null;
 let selectedType = 'bank';
+let payingAsset = null;
 
 export async function renderAssets(container) {
   container.innerHTML = buildShell();
@@ -149,6 +155,30 @@ function buildShell() {
         </button>
       </div>
     </div>
+
+    <!-- 카드값 결제 모달 -->
+    <div id="pay-modal" class="hidden fixed inset-0 z-50 flex items-end">
+      <div class="absolute inset-0 bg-black/40" id="pay-modal-backdrop"></div>
+      <div class="relative bg-white rounded-t-2xl w-full max-w-md mx-auto p-6 z-10">
+        <h2 class="text-lg font-bold text-gray-800 mb-1">카드값 결제</h2>
+        <p id="pay-modal-desc" class="text-sm text-gray-400 mb-4"></p>
+
+        <div class="mb-3">
+          <label class="text-xs text-gray-500 mb-1 block">결제 금액</label>
+          <input id="pay-amount" type="text" inputmode="numeric" placeholder="0"
+            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-lg font-bold text-gray-800 focus:outline-none focus:border-indigo-400" />
+        </div>
+        <div class="mb-5">
+          <label class="text-xs text-gray-500 mb-1 block">결제일</label>
+          <input id="pay-date" type="date"
+            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:border-indigo-400" />
+        </div>
+
+        <button id="pay-confirm-btn" class="w-full bg-indigo-500 text-white font-semibold py-3.5 rounded-xl active:bg-indigo-600">
+          결제 처리
+        </button>
+      </div>
+    </div>
   `;
 }
 
@@ -219,18 +249,25 @@ function renderList() {
       <button class="move-down text-gray-300 p-1 ${canDown ? '' : 'opacity-30 pointer-events-none'}" data-id="${a.id}">▼</button>
     `;
 
+    const payBtn = (isCredit && a.linkedBankId)
+      ? `<button class="pay-card w-full mt-2 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg py-2" data-id="${a.id}">카드값 결제</button>`
+      : '';
+
     return `
-      <div class="bg-white rounded-2xl px-4 py-3.5 shadow-sm flex items-center gap-3 ${isReward ? 'ml-5 border-l-2 border-sky-200' : ''}">
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-semibold text-gray-800">${a.name}</p>
-          <p class="text-xs text-gray-400 truncate">${subInfo}</p>
+      <div class="bg-white rounded-2xl px-4 py-3.5 shadow-sm ${isReward ? 'ml-5 border-l-2 border-sky-200' : ''}">
+        <div class="flex items-center gap-3">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-gray-800">${a.name}</p>
+            <p class="text-xs text-gray-400 truncate">${subInfo}</p>
+          </div>
+          <span class="text-sm font-bold ${balanceColor} mr-1">${fmt(a.balance)}</span>
+          <div class="flex flex-col">${orderBtns}</div>
+          <div class="flex gap-1">
+            <button class="edit-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">수정</button>
+            <button class="del-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">삭제</button>
+          </div>
         </div>
-        <span class="text-sm font-bold ${balanceColor} mr-1">${fmt(a.balance)}</span>
-        <div class="flex flex-col">${orderBtns}</div>
-        <div class="flex gap-1">
-          <button class="edit-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">수정</button>
-          <button class="del-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">삭제</button>
-        </div>
+        ${payBtn}
       </div>
     `;
   }).join('');
@@ -257,6 +294,13 @@ function bindEvents(container) {
   document.getElementById('asset-modal-backdrop').addEventListener('click', closeModal);
   document.getElementById('asset-save-btn').addEventListener('click', save);
 
+  document.getElementById('pay-modal-backdrop').addEventListener('click', closePayModal);
+  document.getElementById('pay-confirm-btn').addEventListener('click', confirmPayment);
+  document.getElementById('pay-amount').addEventListener('input', e => {
+    const raw = e.target.value.replace(/[^0-9]/g, '');
+    e.target.value = raw ? Number(raw).toLocaleString('ko-KR') : '';
+  });
+
   document.getElementById('type-grid').addEventListener('click', e => {
     const btn = e.target.closest('.type-btn');
     if (btn) selectType(btn.dataset.type);
@@ -273,6 +317,13 @@ function bindEvents(container) {
     const edit = e.target.closest('.edit-asset');
     const up = e.target.closest('.move-up');
     const down = e.target.closest('.move-down');
+    const pay = e.target.closest('.pay-card');
+
+    if (pay) {
+      const a = assets.find(a => a.id === pay.dataset.id);
+      if (a) await openPayModal(a);
+      return;
+    }
 
     if (del) {
       if (!confirm('자산을 삭제할까요?')) return;
@@ -327,6 +378,57 @@ function openModal(asset = null) {
 function closeModal() {
   document.getElementById('asset-modal').classList.add('hidden');
   editing = null;
+}
+
+async function openPayModal(asset) {
+  payingAsset = asset;
+  const bank = assets.find(b => b.id === asset.linkedBankId);
+
+  const now = new Date();
+  let suggested = 0;
+  try {
+    const payments = await getCardPayments(now.getFullYear(), now.getMonth() + 1);
+    suggested = payments.find(p => p.assetId === asset.id)?.amount || 0;
+  } catch (e) {
+    console.error(e);
+  }
+
+  document.getElementById('pay-modal-desc').textContent =
+    `${bank?.name || '연결 계좌'}에서 ${asset.name} 대금을 결제 처리합니다`;
+  document.getElementById('pay-amount').value = suggested ? suggested.toLocaleString('ko-KR') : '';
+  document.getElementById('pay-date').value = localDateStr();
+  document.getElementById('pay-modal').classList.remove('hidden');
+}
+
+function closePayModal() {
+  document.getElementById('pay-modal').classList.add('hidden');
+  payingAsset = null;
+}
+
+async function confirmPayment() {
+  const amount = document.getElementById('pay-amount').value.replace(/,/g, '');
+  const date = document.getElementById('pay-date').value;
+  if (!amount || Number(amount) <= 0) return alert('금액을 입력해주세요');
+  if (!date) return alert('날짜를 선택해주세요');
+  if (!payingAsset?.linkedBankId) return alert('연결된 계좌가 없습니다');
+
+  const bank = assets.find(b => b.id === payingAsset.linkedBankId);
+  try {
+    await addTransfer({
+      amount, date,
+      fromAssetId: payingAsset.linkedBankId,
+      fromAssetName: bank?.name || '',
+      toAssetId: payingAsset.id,
+      toAssetName: payingAsset.name,
+      memo: '카드값 결제',
+    });
+    closePayModal();
+    assets = await getAssets();
+    renderList();
+    updateNetWorth();
+  } catch (e) {
+    alert('결제 처리 실패: ' + e.message);
+  }
 }
 
 function selectType(type) {
