@@ -307,6 +307,10 @@ export async function updateTransaction(id, oldTx, newData, sourceAsset) {
   );
   applyUsage(batch, mergeUsageNested(uDec, uInc));
 
+  // 총액이나 할부 개월이 바뀌면 회차별 수동 조정값은 더 이상 유효하지 않으므로 초기화
+  const installmentInvalidated =
+    Number(newData.amount) !== oldTx.amount || (newData.installment || 1) !== (oldTx.installment || 1);
+
   batch.update(txDocRef(id), {
     ...newData,
     amount: Number(newData.amount),
@@ -314,6 +318,7 @@ export async function updateTransaction(id, oldTx, newData, sourceAsset) {
     date: Timestamp.fromDate(new Date(newData.date)),
     balanceAssetId: newBalanceAssetId || null,
     rewardTxId: rewardTxId,
+    ...(installmentInvalidated ? { installmentAmounts: null } : {}),
   });
 
   await batch.commit();
@@ -418,6 +423,38 @@ function daysInMonth(year, month) {
   return new Date(year, month, 0).getDate();
 }
 
+function defaultInstallmentAmounts(amount, installment) {
+  const base = Math.floor(amount / installment);
+  const arr = Array(installment).fill(base);
+  arr[installment - 1] += amount - base * installment; // 나머지는 마지막 회차가 흡수
+  return arr;
+}
+
+// 회차별 결제 금액 (수동으로 조정한 값이 있으면 그걸 우선 사용)
+export function getInstallmentAmounts(tx) {
+  const inst = tx.installment || 1;
+  if (tx.installmentAmounts && tx.installmentAmounts.length === inst) return tx.installmentAmounts;
+  return defaultInstallmentAmounts(tx.amount, inst);
+}
+
+// 특정 회차 금액을 수정하면 그 이후 남은 회차에 차액을 다시 균등 분배한다
+export async function updateInstallmentAmount(tx, seq, newAmount) {
+  const inst = tx.installment || 1;
+  const next = [...getInstallmentAmounts(tx)];
+  next[seq - 1] = newAmount;
+
+  const fixedSum = next.slice(0, seq).reduce((a, b) => a + b, 0);
+  const remaining = tx.amount - fixedSum;
+  const remainingCount = inst - seq;
+  if (remainingCount > 0) {
+    const base = Math.floor(remaining / remainingCount);
+    for (let i = seq; i < inst; i++) next[i] = base;
+    next[inst - 1] += remaining - base * remainingCount;
+  }
+
+  await updateDoc(txDocRef(tx.id), { installmentAmounts: next });
+}
+
 export async function getMonthTransactions(year, month) {
   // 할부 회차를 같은 날짜로 보여주기 위해 최대 12개월 전까지 조회
   const winStart = new Date(year, month - 13, 1);
@@ -437,7 +474,12 @@ export async function getMonthTransactions(year, month) {
     const ty = d.getFullYear(), tm = d.getMonth() + 1;
 
     if (ty === year && tm === month) {
-      result.push({ ...tx, installmentSeq: 1 });
+      const inst0 = tx.installment || 1;
+      result.push({
+        ...tx,
+        installmentSeq: 1,
+        monthAmount: inst0 > 1 ? getInstallmentAmounts(tx)[0] : tx.amount,
+      });
       continue;
     }
 
@@ -451,6 +493,7 @@ export async function getMonthTransactions(year, month) {
           date: Timestamp.fromDate(new Date(year, month - 1, day)),
           isInstallmentGhost: true,
           installmentSeq: monthsFromPurchase + 1,
+          monthAmount: getInstallmentAmounts(tx)[monthsFromPurchase],
         });
       }
     }
@@ -491,7 +534,7 @@ export async function getMonthSummary(year, month) {
         ? monthsFromPurchase === 0
         : (monthsFromPurchase >= 0 && monthsFromPurchase < inst);
       if (inRange) {
-        const monthly = inst > 1 ? Math.floor(tx.amount / inst) : tx.amount;
+        const monthly = inst > 1 ? getInstallmentAmounts(tx)[monthsFromPurchase] : tx.amount;
         expense += monthly;
         if (tx.category) catExpenses[tx.category] = (catExpenses[tx.category] || 0) + monthly;
         if (tx.assetId) {
@@ -546,7 +589,7 @@ export async function getCardPayments(year, month) {
       : (monthsFromFirst >= 0 && monthsFromFirst < inst);
 
     if (inRange && tx.assetId) {
-      const monthly = inst > 1 ? Math.floor(tx.amount / inst) : tx.amount;
+      const monthly = inst > 1 ? getInstallmentAmounts(tx)[monthsFromFirst] : tx.amount;
       if (!cardTotals[tx.assetId]) {
         cardTotals[tx.assetId] = { assetName: tx.assetName || '카드', amount: 0 };
       }

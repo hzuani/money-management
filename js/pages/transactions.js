@@ -1,4 +1,4 @@
-import { getMonthTransactions, addTransaction, deleteTransaction, updateTransaction, addTransfer, deleteTransfer, updateTransfer, getAssets, getCategories, addCategory, getUsageCounts, getFixedNames } from '../db.js';
+import { getMonthTransactions, addTransaction, deleteTransaction, updateTransaction, addTransfer, deleteTransfer, updateTransfer, getAssets, getCategories, addCategory, getUsageCounts, getFixedNames, updateInstallmentAmount } from '../db.js';
 
 let EXPENSE_CATS = [];
 let INCOME_CATS = [];
@@ -30,6 +30,7 @@ let selectedToAssetId = '';
 let selectedInstallment = 1;
 let selectedFixed = false;
 let fixedNames = [];
+let instEditTarget = null;
 
 function localDateStr() {
   const d = new Date();
@@ -152,6 +153,24 @@ function buildShell() {
         </button>
       </div>
     </div>
+
+    <!-- 할부 회차 금액 수정 모달 -->
+    <div id="inst-amount-modal" class="hidden fixed inset-0 z-50 flex items-end">
+      <div class="absolute inset-0 bg-black/40" id="inst-amount-backdrop"></div>
+      <div class="relative bg-white rounded-t-2xl w-full max-w-md mx-auto p-6 z-10">
+        <h2 class="text-lg font-bold text-gray-800 mb-1">회차 금액 수정</h2>
+        <p id="inst-amount-desc" class="text-sm text-gray-400 mb-4"></p>
+        <div class="mb-5">
+          <label class="text-xs text-gray-500 mb-1 block">이번 회차 결제 금액</label>
+          <input id="inst-amount-input" type="text" inputmode="numeric"
+            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-lg font-bold text-gray-800 focus:outline-none focus:border-indigo-400" />
+          <p class="text-xs text-gray-400 mt-1">남은 회차 금액은 자동으로 다시 나뉩니다</p>
+        </div>
+        <button id="inst-amount-save" class="w-full bg-indigo-500 text-white font-semibold py-3.5 rounded-xl active:bg-indigo-600">
+          저장
+        </button>
+      </div>
+    </div>
   `;
 }
 
@@ -173,6 +192,7 @@ function renderList(listEl) {
     const isTransfer = t.type === 'transfer';
 
     let label, sub, amountEl;
+    let hasInst = false;
 
     if (isTransfer) {
       const fromAsset = assets.find(a => a.id === t.fromAssetId);
@@ -188,20 +208,25 @@ function renderList(listEl) {
       sub = `${displayDate(t.date)}${asset ? ' · ' + asset.name : ''}`;
       const color = t.type === 'income' ? 'text-blue-500' : 'text-red-500';
       const sign = t.type === 'income' ? '+' : '-';
-      const hasInst = t.type === 'expense' && t.installment > 1;
-      const dispAmt = hasInst ? Math.floor(t.amount / t.installment) : t.amount;
+      hasInst = t.type === 'expense' && t.installment > 1;
+      const dispAmt = hasInst ? t.monthAmount : t.amount;
       amountEl = `<div class="text-right mr-2 whitespace-nowrap">
         <span class="text-sm font-bold ${color}">${sign}${fmt(dispAmt)}</span>
         ${hasInst ? `<p class="text-xs text-gray-400">할부 ${t.installmentSeq}/${t.installment}</p>` : ''}
       </div>`;
     }
 
+    const instBtn = hasInst
+      ? `<button class="inst-amount-btn text-xs text-indigo-500 px-1.5" data-id="${t.id}">회차수정</button>`
+      : '';
+
     const actions = isAuto
       ? `<span class="text-xs text-gray-300 px-1">자동</span>`
       : isGhost
-        ? `<span class="text-xs text-gray-300 px-1">할부중</span>`
+        ? instBtn
         : `<button class="edit-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">수정</button>
-           <button class="del-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">삭제</button>`;
+           <button class="del-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">삭제</button>
+           ${instBtn}`;
 
     return `
       <div class="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm ${(isAuto || isGhost) ? 'opacity-70' : ''}">
@@ -242,9 +267,22 @@ function bindEvents(container) {
   });
   document.getElementById('save-btn').addEventListener('click', save);
 
+  document.getElementById('inst-amount-backdrop').addEventListener('click', closeInstAmountModal);
+  document.getElementById('inst-amount-save').addEventListener('click', saveInstAmount);
+  document.getElementById('inst-amount-input').addEventListener('input', e => {
+    const raw = e.target.value.replace(/[^0-9]/g, '');
+    e.target.value = raw ? Number(raw).toLocaleString('ko-KR') : '';
+  });
+
   document.getElementById('tx-list').addEventListener('click', async e => {
     const delBtn = e.target.closest('.del-btn');
     const editBtn = e.target.closest('.edit-btn');
+    const instBtn = e.target.closest('.inst-amount-btn');
+    if (instBtn) {
+      const tx = state.txs.find(t => t.id === instBtn.dataset.id);
+      if (tx) openInstAmountModal(tx);
+      return;
+    }
     if (delBtn) {
       if (!confirm('삭제할까요?')) return;
       const tx = state.txs.find(t => t.id === delBtn.dataset.id);
@@ -259,6 +297,34 @@ function bindEvents(container) {
       if (tx) openModal(tx);
     }
   });
+}
+
+function openInstAmountModal(t) {
+  instEditTarget = t;
+  document.getElementById('inst-amount-desc').textContent =
+    `${t.category}${t.memo ? ' · ' + t.memo : ''} · 할부 ${t.installmentSeq}/${t.installment}회차`;
+  document.getElementById('inst-amount-input').value = Number(t.monthAmount).toLocaleString('ko-KR');
+  document.getElementById('inst-amount-modal').classList.remove('hidden');
+}
+
+function closeInstAmountModal() {
+  document.getElementById('inst-amount-modal').classList.add('hidden');
+  instEditTarget = null;
+}
+
+async function saveInstAmount() {
+  const raw = document.getElementById('inst-amount-input').value.replace(/,/g, '');
+  const newAmount = Number(raw);
+  if (!raw || newAmount <= 0) return alert('금액을 입력해주세요');
+
+  try {
+    await updateInstallmentAmount(instEditTarget, instEditTarget.installmentSeq, newAmount);
+    closeInstAmountModal();
+    state.txs = await getMonthTransactions(state.year, state.month);
+    renderList(document.getElementById('tx-list'));
+  } catch (e) {
+    alert('수정 실패: ' + e.message);
+  }
 }
 
 function openModal(tx = null) {
