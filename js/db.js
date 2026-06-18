@@ -150,10 +150,17 @@ export async function deleteAsset(id) {
 
 // ─── 거래 내역 ────────────────────────────────────────────
 
+// 체크카드는 연결된 은행 계좌가 있으면 그 계좌 잔액이 직접 바뀐다 (카드 자체는 잔액을 갖지 않음)
+function resolveBalanceAssetId(assetId, sourceAsset) {
+  if (sourceAsset?.type === 'debit' && sourceAsset?.linkedBankId) return sourceAsset.linkedBankId;
+  return assetId;
+}
+
 // sourceAsset: 선택된 자산 객체 (prepaid 자동 적립 처리용)
 export async function addTransaction(data, sourceAsset) {
   const batch = writeBatch(db);
   const txRef = doc(userCol('transactions'));
+  const balanceAssetId = resolveBalanceAssetId(data.assetId, sourceAsset);
 
   // 충전카드 지출 시 적립금 자동 생성
   let rewardTxId = null;
@@ -188,13 +195,14 @@ export async function addTransaction(data, sourceAsset) {
     amount: Number(data.amount),
     installment: data.installment || 1,
     date: Timestamp.fromDate(new Date(data.date)),
+    balanceAssetId: balanceAssetId || null,
     createdAt: Timestamp.now(),
     ...(rewardTxId ? { rewardTxId } : {}),
   });
 
-  if (data.assetId) {
+  if (balanceAssetId) {
     const delta = data.type === 'income' ? Number(data.amount) : -Number(data.amount);
-    batch.update(assetDocRef(data.assetId), { balance: increment(delta) });
+    batch.update(assetDocRef(balanceAssetId), { balance: increment(delta) });
   }
 
   applyUsage(batch, usageNested(data.category, data.assetId, 1));
@@ -206,9 +214,10 @@ export async function deleteTransaction(tx) {
   const batch = writeBatch(db);
   batch.delete(txDocRef(tx.id));
 
-  if (tx.assetId) {
+  const balanceAssetId = tx.balanceAssetId || tx.assetId;
+  if (balanceAssetId) {
     const delta = tx.type === 'income' ? -tx.amount : tx.amount;
-    batch.update(assetDocRef(tx.assetId), { balance: increment(delta) });
+    batch.update(assetDocRef(balanceAssetId), { balance: increment(delta) });
   }
 
   applyUsage(batch, usageNested(tx.category, tx.assetId, -1));
@@ -232,9 +241,10 @@ export async function updateTransaction(id, oldTx, newData, sourceAsset) {
   const batch = writeBatch(db);
 
   // 기존 자산 효과 되돌리기
-  if (oldTx.assetId) {
+  const oldBalanceAssetId = oldTx.balanceAssetId || oldTx.assetId;
+  if (oldBalanceAssetId) {
     const oldDelta = oldTx.type === 'income' ? -oldTx.amount : oldTx.amount;
-    batch.update(assetDocRef(oldTx.assetId), { balance: increment(oldDelta) });
+    batch.update(assetDocRef(oldBalanceAssetId), { balance: increment(oldDelta) });
   }
 
   // 기존 적립금 내역 삭제
@@ -278,9 +288,10 @@ export async function updateTransaction(id, oldTx, newData, sourceAsset) {
   }
 
   // 새 자산 효과 적용
-  if (newData.assetId) {
+  const newBalanceAssetId = resolveBalanceAssetId(newData.assetId, sourceAsset);
+  if (newBalanceAssetId) {
     const newDelta = newData.type === 'income' ? Number(newData.amount) : -Number(newData.amount);
-    batch.update(assetDocRef(newData.assetId), { balance: increment(newDelta) });
+    batch.update(assetDocRef(newBalanceAssetId), { balance: increment(newDelta) });
   }
 
   // 카테고리/자산이 바뀐 경우 카운트 조정
@@ -301,6 +312,7 @@ export async function updateTransaction(id, oldTx, newData, sourceAsset) {
     amount: Number(newData.amount),
     installment: newData.installment || 1,
     date: Timestamp.fromDate(new Date(newData.date)),
+    balanceAssetId: newBalanceAssetId || null,
     rewardTxId: rewardTxId,
   });
 

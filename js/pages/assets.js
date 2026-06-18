@@ -218,13 +218,16 @@ function renderList() {
   el.innerHTML = displayed.map(a => {
     const t = typeInfo(a.type);
     const isCredit = a.type === 'credit';
+    const isDebit = a.type === 'debit';
     const isPrepaid = a.type === 'prepaid';
     const isReward = rewardIds.has(a.id);
-    const balanceColor = isCredit ? 'text-red-500' : (a.balance >= 0 ? 'text-gray-800' : 'text-red-500');
+    const linkedBank = a.linkedBankId ? assets.find(b => b.id === a.linkedBankId) : null;
+    // 체크카드는 연결된 계좌가 있으면 그 계좌 잔액을 그대로 보여준다 (카드 자체는 잔액을 안 가짐)
+    const displayBalance = (isDebit && linkedBank) ? linkedBank.balance : a.balance;
+    const balanceColor = isCredit ? 'text-red-500' : (displayBalance >= 0 ? 'text-gray-800' : 'text-red-500');
 
     let subInfo = t.label;
-    if (isCredit || a.type === 'debit') {
-      const linkedBank = a.linkedBankId ? assets.find(b => b.id === a.linkedBankId) : null;
+    if (isCredit || isDebit) {
       const parts = [];
       if (linkedBank) parts.push(`${linkedBank.name} 연결`);
       if (isCredit && a.billingCycleStart) {
@@ -260,7 +263,7 @@ function renderList() {
             <p class="text-sm font-semibold text-gray-800">${a.name}</p>
             <p class="text-xs text-gray-400 truncate">${subInfo}</p>
           </div>
-          <span class="text-sm font-bold ${balanceColor} mr-1">${fmt(a.balance)}</span>
+          <span class="text-sm font-bold ${balanceColor} mr-1">${fmt(displayBalance)}</span>
           <div class="flex flex-col">${orderBtns}</div>
           <div class="flex gap-1">
             <button class="edit-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">수정</button>
@@ -285,7 +288,11 @@ async function moveAsset(id, dir) {
 }
 
 function updateNetWorth() {
-  const total = assets.reduce((s, a) => s + a.balance, 0);
+  // 연결된 계좌가 있는 체크카드는 그 계좌 잔액에 이미 포함되므로 중복 제외
+  const total = assets.reduce((s, a) => {
+    if (a.type === 'debit' && a.linkedBankId) return s;
+    return s + a.balance;
+  }, 0);
   document.getElementById('net-worth-value').textContent = fmt(total);
 }
 
