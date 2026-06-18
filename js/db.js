@@ -414,17 +414,49 @@ export async function getFixedNames() {
   return [...names].sort();
 }
 
+function daysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
 export async function getMonthTransactions(year, month) {
-  const start = new Date(year, month - 1, 1);
+  // 할부 회차를 같은 날짜로 보여주기 위해 최대 12개월 전까지 조회
+  const winStart = new Date(year, month - 13, 1);
   const end = new Date(year, month, 1);
   const q = query(
     userCol('transactions'),
-    where('date', '>=', Timestamp.fromDate(start)),
+    where('date', '>=', Timestamp.fromDate(winStart)),
     where('date', '<', Timestamp.fromDate(end)),
     orderBy('date', 'desc')
   );
   const snap = await getDocs(q);
-  return sortByDateThenCreated(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  const allTxs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  const result = [];
+  for (const tx of allTxs) {
+    const d = tx.date.toDate();
+    const ty = d.getFullYear(), tm = d.getMonth() + 1;
+
+    if (ty === year && tm === month) {
+      result.push({ ...tx, installmentSeq: 1 });
+      continue;
+    }
+
+    const inst = tx.installment || 1;
+    if (inst > 1 && tx.type === 'expense') {
+      const monthsFromPurchase = (year - ty) * 12 + (month - tm);
+      if (monthsFromPurchase > 0 && monthsFromPurchase < inst) {
+        const day = Math.min(d.getDate(), daysInMonth(year, month));
+        result.push({
+          ...tx,
+          date: Timestamp.fromDate(new Date(year, month - 1, day)),
+          isInstallmentGhost: true,
+          installmentSeq: monthsFromPurchase + 1,
+        });
+      }
+    }
+  }
+
+  return sortByDateThenCreated(result);
 }
 
 export async function getMonthSummary(year, month) {

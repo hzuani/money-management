@@ -169,6 +169,7 @@ function renderList(listEl) {
   }
   listEl.innerHTML = state.txs.map(t => {
     const isAuto = !!t.isAutoReward;
+    const isGhost = !!t.isInstallmentGhost;
     const isTransfer = t.type === 'transfer';
 
     let label, sub, amountEl;
@@ -191,17 +192,19 @@ function renderList(listEl) {
       const dispAmt = hasInst ? Math.floor(t.amount / t.installment) : t.amount;
       amountEl = `<div class="text-right mr-2 whitespace-nowrap">
         <span class="text-sm font-bold ${color}">${sign}${fmt(dispAmt)}</span>
-        ${hasInst ? `<p class="text-xs text-gray-400">${t.installment}개월 할부</p>` : ''}
+        ${hasInst ? `<p class="text-xs text-gray-400">할부 ${t.installmentSeq}/${t.installment}</p>` : ''}
       </div>`;
     }
 
     const actions = isAuto
       ? `<span class="text-xs text-gray-300 px-1">자동</span>`
-      : `<button class="edit-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">수정</button>
-         <button class="del-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">삭제</button>`;
+      : isGhost
+        ? `<span class="text-xs text-gray-300 px-1">할부중</span>`
+        : `<button class="edit-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">수정</button>
+           <button class="del-btn text-xs text-gray-400 px-1.5" data-id="${t.id}">삭제</button>`;
 
     return `
-      <div class="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm ${isAuto ? 'opacity-70' : ''}">
+      <div class="bg-white rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm ${(isAuto || isGhost) ? 'opacity-70' : ''}">
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5">
             <p class="text-sm font-medium text-gray-800 truncate">${label}</p>
