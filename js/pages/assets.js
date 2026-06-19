@@ -22,6 +22,12 @@ const ASSET_GROUPS = [
   { label: '투자/저축', types: ['investment', 'savings', 'housing'] },
 ];
 
+// 순서 이동은 같은 화면 그룹(예: 카드) 안에서 동작해야 한다 (단일 type만 비교하면 비교 대상이 없을 수 있음)
+function groupTypesFor(type) {
+  const g = ASSET_GROUPS.find(g => g.types.includes(type));
+  return g ? g.types : [type];
+}
+
 function fmt(n) {
   const abs = Math.abs(n).toLocaleString('ko-KR');
   return (n < 0 ? '-' : '') + abs + '원';
@@ -309,13 +315,14 @@ async function moveAsset(id, dir) {
   const a = assets.find(x => x.id === id);
   if (!a) return;
   const rewardIds = new Set(assets.filter(x => x.rewardAssetId).map(x => x.rewardAssetId));
-  const sameType = assets
-    .filter(x => x.type === a.type && !rewardIds.has(x.id))
+  const groupTypes = groupTypesFor(a.type);
+  const sameGroup = assets
+    .filter(x => groupTypes.includes(x.type) && !rewardIds.has(x.id))
     .sort((x, y) => (x.sortOrder ?? x.createdAt?.seconds ?? 0) - (y.sortOrder ?? y.createdAt?.seconds ?? 0));
-  const idx = sameType.findIndex(x => x.id === id);
+  const idx = sameGroup.findIndex(x => x.id === id);
   const swapIdx = idx + dir;
-  if (swapIdx < 0 || swapIdx >= sameType.length) return;
-  await swapAssetOrder(sameType[idx], sameType[swapIdx]);
+  if (swapIdx < 0 || swapIdx >= sameGroup.length) return;
+  await swapAssetOrder(sameGroup[idx], sameGroup[swapIdx]);
   assets = await getAssets();
   renderList();
 }

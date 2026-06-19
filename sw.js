@@ -1,4 +1,4 @@
-const CACHE = 'budget-app-v18';
+const CACHE = 'budget-app-v19';
 const ASSETS = [
   './',
   'index.html',
