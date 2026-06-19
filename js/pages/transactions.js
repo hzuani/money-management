@@ -200,7 +200,7 @@ function renderList(listEl) {
       const fromName = fromAsset?.name || t.fromAssetName || '?';
       const toName = toAsset?.name || t.toAssetName || '?';
       label = `${fromName} → ${toName}`;
-      sub = `이체${t.memo ? ' · ' + t.memo : ''}`;
+      sub = `${displayDate(t.date)} · 이체${t.memo ? ' · ' + t.memo : ''}`;
       amountEl = `<span class="text-sm font-bold text-indigo-500 mr-2 whitespace-nowrap">${fmt(t.amount)}</span>`;
     } else {
       const asset = assets.find(a => a.id === t.assetId);
