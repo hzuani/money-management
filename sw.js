@@ -1,4 +1,4 @@
-const CACHE = 'budget-app-v17';
+const CACHE = 'budget-app-v18';
 const ASSETS = [
   './',
   'index.html',
@@ -7,7 +7,6 @@ const ASSETS = [
   'js/db.js',
   'js/router.js',
   'js/app.js',
-  'js/pages/dashboard.js',
   'js/pages/transactions.js',
   'js/pages/fixed.js',
 ];

@@ -16,6 +16,12 @@ export function typeInfo(value) {
   return ASSET_TYPES.find(t => t.value === value) || ASSET_TYPES[0];
 }
 
+const ASSET_GROUPS = [
+  { label: '은행/현금', types: ['bank', 'cash'] },
+  { label: '카드', types: ['credit', 'debit', 'prepaid'] },
+  { label: '투자/저축', types: ['investment', 'savings', 'housing'] },
+];
+
 function fmt(n) {
   const abs = Math.abs(n).toLocaleString('ko-KR');
   return (n < 0 ? '-' : '') + abs + '원';
@@ -203,6 +209,79 @@ function getDisplayOrder(assets) {
   return result;
 }
 
+function renderAssetItem(a, rewardIds, movableInGroup) {
+  const t = typeInfo(a.type);
+  const isCredit = a.type === 'credit';
+  const isDebit = a.type === 'debit';
+  const isPrepaid = a.type === 'prepaid';
+  const isReward = rewardIds.has(a.id);
+  const linkedBank = a.linkedBankId ? assets.find(b => b.id === a.linkedBankId) : null;
+  // 체크카드는 연결된 계좌가 있으면 그 계좌 잔액을 그대로 보여준다 (카드 자체는 잔액을 안 가짐)
+  const displayBalance = (isDebit && linkedBank) ? linkedBank.balance : a.balance;
+  const balanceColor = isCredit ? 'text-red-500' : (displayBalance >= 0 ? 'text-gray-800' : 'text-red-500');
+
+  let subInfo = t.label;
+  if (isCredit || isDebit) {
+    const parts = [];
+    if (linkedBank) parts.push(`${linkedBank.name} 연결`);
+    if (isCredit && a.billingCycleStart) {
+      const endDay = a.billingCycleStart - 1 || 31;
+      parts.push(`${a.billingCycleStart}일~${endDay}일 결제기간`);
+    }
+    if (isCredit && a.paymentDay) parts.push(`매월 ${a.paymentDay}일 결제`);
+    if (isCredit && a.creditLimit) parts.push(`한도 ${fmt(a.creditLimit)}`);
+    if (parts.length) subInfo = parts.join(' · ');
+  } else if (isPrepaid) {
+    const parts = ['충전금'];
+    if (a.rewardRate) parts.push(`적립률 ${a.rewardRate}%`);
+    subInfo = parts.join(' · ');
+  }
+
+  const movableIdx = movableInGroup.findIndex(m => m.id === a.id);
+  const canUp = !isReward && movableIdx > 0;
+  const canDown = !isReward && movableIdx < movableInGroup.length - 1;
+
+  const orderBtns = isReward ? '' : `
+    <button class="move-up text-gray-300 p-1 ${canUp ? '' : 'opacity-30 pointer-events-none'}" data-id="${a.id}">▲</button>
+    <button class="move-down text-gray-300 p-1 ${canDown ? '' : 'opacity-30 pointer-events-none'}" data-id="${a.id}">▼</button>
+  `;
+
+  const payBtn = (isCredit && a.linkedBankId)
+    ? `<button class="pay-card w-full mt-2 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg py-2" data-id="${a.id}">카드값 결제</button>`
+    : '';
+
+  return `
+    <div class="bg-white rounded-2xl px-4 py-3.5 shadow-sm ${isReward ? 'ml-5 border-l-2 border-sky-200' : ''}">
+      <div class="flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-gray-800">${a.name}</p>
+          <p class="text-xs text-gray-400 truncate">${subInfo}</p>
+        </div>
+        <span class="text-sm font-bold ${balanceColor} mr-1">${fmt(displayBalance)}</span>
+        <div class="flex flex-col">${orderBtns}</div>
+        <div class="flex gap-1">
+          <button class="edit-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">수정</button>
+          <button class="del-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">삭제</button>
+        </div>
+      </div>
+      ${payBtn}
+    </div>
+  `;
+}
+
+// 종류별로 묶어서 표시 (적립금은 부모 카드가 속한 그룹에 함께 표시)
+function buildGroups(displayed) {
+  const groups = ASSET_GROUPS.map(g => ({ ...g, items: [] }));
+  let lastIdx = 0;
+  for (const a of displayed) {
+    let idx = groups.findIndex(g => g.types.includes(a.type));
+    if (idx === -1) idx = lastIdx;
+    groups[idx].items.push(a);
+    lastIdx = idx;
+  }
+  return groups.filter(g => g.items.length > 0);
+}
+
 function renderList() {
   const el = document.getElementById('asset-list');
   if (assets.length === 0) {
@@ -211,78 +290,32 @@ function renderList() {
   }
 
   const displayed = getDisplayOrder(assets);
-  // 순서 이동 가능한 자산 (적립금 제외)
   const rewardIds = new Set(assets.filter(a => a.rewardAssetId).map(a => a.rewardAssetId));
-  const movable = displayed.filter(a => !rewardIds.has(a.id));
+  const groups = buildGroups(displayed);
 
-  el.innerHTML = displayed.map(a => {
-    const t = typeInfo(a.type);
-    const isCredit = a.type === 'credit';
-    const isDebit = a.type === 'debit';
-    const isPrepaid = a.type === 'prepaid';
-    const isReward = rewardIds.has(a.id);
-    const linkedBank = a.linkedBankId ? assets.find(b => b.id === a.linkedBankId) : null;
-    // 체크카드는 연결된 계좌가 있으면 그 계좌 잔액을 그대로 보여준다 (카드 자체는 잔액을 안 가짐)
-    const displayBalance = (isDebit && linkedBank) ? linkedBank.balance : a.balance;
-    const balanceColor = isCredit ? 'text-red-500' : (displayBalance >= 0 ? 'text-gray-800' : 'text-red-500');
-
-    let subInfo = t.label;
-    if (isCredit || isDebit) {
-      const parts = [];
-      if (linkedBank) parts.push(`${linkedBank.name} 연결`);
-      if (isCredit && a.billingCycleStart) {
-        const endDay = a.billingCycleStart - 1 || 31;
-        parts.push(`${a.billingCycleStart}일~${endDay}일 결제기간`);
-      }
-      if (isCredit && a.paymentDay) parts.push(`매월 ${a.paymentDay}일 결제`);
-      if (isCredit && a.creditLimit) parts.push(`한도 ${fmt(a.creditLimit)}`);
-      if (parts.length) subInfo = parts.join(' · ');
-    } else if (isPrepaid) {
-      const parts = ['충전금'];
-      if (a.rewardRate) parts.push(`적립률 ${a.rewardRate}%`);
-      subInfo = parts.join(' · ');
-    }
-
-    const movableIdx = movable.findIndex(m => m.id === a.id);
-    const canUp = !isReward && movableIdx > 0;
-    const canDown = !isReward && movableIdx < movable.length - 1;
-
-    const orderBtns = isReward ? '' : `
-      <button class="move-up text-gray-300 p-1 ${canUp ? '' : 'opacity-30 pointer-events-none'}" data-id="${a.id}">▲</button>
-      <button class="move-down text-gray-300 p-1 ${canDown ? '' : 'opacity-30 pointer-events-none'}" data-id="${a.id}">▼</button>
-    `;
-
-    const payBtn = (isCredit && a.linkedBankId)
-      ? `<button class="pay-card w-full mt-2 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg py-2" data-id="${a.id}">카드값 결제</button>`
-      : '';
-
+  el.innerHTML = groups.map(group => {
+    const movableInGroup = group.items.filter(a => !rewardIds.has(a.id));
+    const itemsHtml = group.items.map(a => renderAssetItem(a, rewardIds, movableInGroup)).join('');
     return `
-      <div class="bg-white rounded-2xl px-4 py-3.5 shadow-sm ${isReward ? 'ml-5 border-l-2 border-sky-200' : ''}">
-        <div class="flex items-center gap-3">
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-semibold text-gray-800">${a.name}</p>
-            <p class="text-xs text-gray-400 truncate">${subInfo}</p>
-          </div>
-          <span class="text-sm font-bold ${balanceColor} mr-1">${fmt(displayBalance)}</span>
-          <div class="flex flex-col">${orderBtns}</div>
-          <div class="flex gap-1">
-            <button class="edit-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">수정</button>
-            <button class="del-asset text-xs text-gray-400 px-1.5" data-id="${a.id}">삭제</button>
-          </div>
-        </div>
-        ${payBtn}
+      <div class="mb-5">
+        <h2 class="text-xs font-semibold text-gray-400 px-1 mb-2">${group.label}</h2>
+        <div class="space-y-3">${itemsHtml}</div>
       </div>
     `;
   }).join('');
 }
 
 async function moveAsset(id, dir) {
-  const rewardIds = new Set(assets.filter(a => a.rewardAssetId).map(a => a.rewardAssetId));
-  const movable = assets.filter(a => !rewardIds.has(a.id));
-  const idx = movable.findIndex(a => a.id === id);
+  const a = assets.find(x => x.id === id);
+  if (!a) return;
+  const rewardIds = new Set(assets.filter(x => x.rewardAssetId).map(x => x.rewardAssetId));
+  const sameType = assets
+    .filter(x => x.type === a.type && !rewardIds.has(x.id))
+    .sort((x, y) => (x.sortOrder ?? x.createdAt?.seconds ?? 0) - (y.sortOrder ?? y.createdAt?.seconds ?? 0));
+  const idx = sameType.findIndex(x => x.id === id);
   const swapIdx = idx + dir;
-  if (swapIdx < 0 || swapIdx >= movable.length) return;
-  await swapAssetOrder(movable[idx], movable[swapIdx]);
+  if (swapIdx < 0 || swapIdx >= sameType.length) return;
+  await swapAssetOrder(sameType[idx], sameType[swapIdx]);
   assets = await getAssets();
   renderList();
 }

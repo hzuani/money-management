@@ -518,7 +518,6 @@ export async function getMonthSummary(year, month) {
 
   let income = 0, expense = 0;
   const catExpenses = {};
-  const assetExpenses = {};
 
   for (const tx of allTxs) {
     const d = tx.date.toDate();
@@ -537,10 +536,6 @@ export async function getMonthSummary(year, month) {
         const monthly = inst > 1 ? getInstallmentAmounts(tx)[monthsFromPurchase] : tx.amount;
         expense += monthly;
         if (tx.category) catExpenses[tx.category] = (catExpenses[tx.category] || 0) + monthly;
-        if (tx.assetId) {
-          if (!assetExpenses[tx.assetId]) assetExpenses[tx.assetId] = { assetName: tx.assetName || '', amount: 0 };
-          assetExpenses[tx.assetId].amount += monthly;
-        }
       }
     }
   }
@@ -550,7 +545,7 @@ export async function getMonthSummary(year, month) {
     return d.getFullYear() === year && d.getMonth() + 1 === month;
   }));
 
-  return { income, expense, balance: income - expense, txs, catExpenses, assetExpenses };
+  return { income, expense, balance: income - expense, txs, catExpenses };
 }
 
 // 특정 월에 결제되는 신용카드 청구 합계 (결제기간 + 할부 반영)

@@ -15,11 +15,11 @@ export function initRouter() {
 }
 
 function handleRoute() {
-  const page = location.hash.replace('#', '') || 'dashboard';
+  const page = location.hash.replace('#', '') || 'transactions';
   if (currentPage === page) return;
   currentPage = page;
 
-  const render = routes[page] || routes['dashboard'];
+  const render = routes[page] || routes['transactions'];
   const container = document.getElementById('page-container');
   container.innerHTML = '';
   render(container);

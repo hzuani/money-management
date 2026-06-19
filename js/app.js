@@ -1,7 +1,6 @@
 import { onAuthChange, loginWithGoogle, logout } from './auth.js';
 import { initRouter, register, navigate } from './router.js';
 import { initDefaultCategories, initUsageCounts } from './db.js';
-import { renderDashboard } from './pages/dashboard.js';
 import { renderTransactions } from './pages/transactions.js';
 import { renderAssets } from './pages/assets.js';
 import { renderStats } from './pages/stats.js';
@@ -9,7 +8,6 @@ import { renderSettings } from './pages/settings.js';
 import { renderCategories } from './pages/categories.js';
 import { renderFixed } from './pages/fixed.js';
 
-register('dashboard', renderDashboard);
 register('transactions', renderTransactions);
 register('assets', renderAssets);
 register('fixed', renderFixed);
